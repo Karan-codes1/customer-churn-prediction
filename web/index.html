@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Live telecom customer churn predictor: logistic regression trained on 7,043 customers, running in the browser.">
+<title>Customer Churn Predictor</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: an operator's desk. Left = the customer record you edit, right = a live risk readout that stays in view; evidence (model, data) follows below. */
+:root{
+  --bg:#f3f5f8; --surface:#ffffff; --surface-2:#eaeef3; --ink:#0d1622; --ink-2:#465264; --ink-3:#6f7a8a; --line:#dce2e9;
+  --accent:#1c5cab; --accent-soft:#e3eefb; --on-accent:#ffffff;
+  --s1:#2a78d6; --s2:#eb6834; --up:#e34948; --down:#2a78d6;
+  --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;
+  --display:"Bricolage Grotesque","IBM Plex Sans",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0e1216; --surface:#161b21; --surface-2:#1f262e; --ink:#f1f4f7; --ink-2:#b3bdc9; --ink-3:#8491a0; --line:#28313b;
+  --accent:#6da7ec; --accent-soft:#17283d; --on-accent:#0b1522;
+  --s1:#3987e5; --s2:#d95926; --up:#e66767; --down:#3987e5;
+  color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0e1216; --surface:#161b21; --surface-2:#1f262e; --ink:#f1f4f7; --ink-2:#b3bdc9; --ink-3:#8491a0; --line:#28313b;
+  --accent:#6da7ec; --accent-soft:#17283d; --on-accent:#0b1522;
+  --s1:#3987e5; --s2:#d95926; --up:#e66767; --down:#3987e5;
+  color-scheme:dark }
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5;margin:0}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:28px 56px;display:flex;flex-direction:column;gap:56px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+h1{font-size:clamp(30px,5vw,46px);line-height:1.05;font-weight:700}
+h2{font-size:clamp(22px,3vw,28px);line-height:1.15;font-weight:700}
+h3{font-size:16px;font-weight:500;font-family:var(--body);font-weight:600}
+p{margin:0}
+.muted{color:var(--ink-2)}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* header */
+.top{display:flex;flex-direction:column;gap:18px}
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.nav{display:flex;gap:4px;flex-wrap:wrap}
+.nav a{font-size:14px;text-decoration:none;color:var(--ink-2);padding:6px 10px;border-radius:6px}
+.nav a:hover{background:var(--surface-2);color:var(--ink)}
+.lede{max-width:62ch;font-size:17px;color:var(--ink-2)}
+.facts{display:flex;flex-wrap:wrap;gap:10px 28px;margin:0;padding-top:16px;border-top:1px solid var(--line)}
+.facts div{display:flex;flex-direction:column;gap:2px}
+.facts dt{font-size:12px;color:var(--ink-3)}
+.facts dd{margin:0;font-family:var(--mono);font-size:18px;font-weight:500;font-variant-numeric:tabular-nums}
+
+/* predictor */
+.sec-head{display:flex;flex-direction:column;gap:6px;margin-bottom:20px}
+.sec-head p{max-width:65ch;color:var(--ink-2)}
+.desk{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:24px;align-items:start}
+.record{display:flex;flex-direction:column;gap:22px;min-width:0}
+.presets{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.presets span{font-size:13px;color:var(--ink-3)}
+.btn{font:inherit;font-size:13px;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 12px;cursor:pointer}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+fieldset{border:0;margin:0;padding:0;min-width:0;display:flex;flex-direction:column;gap:12px}
+legend{padding:0;margin-bottom:10px;font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px 18px}
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.field.wide{grid-column:1/-1}
+.flabel{font-size:13px;font-weight:500;color:var(--ink-2);display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.flabel output{font-family:var(--mono);font-size:14px;color:var(--ink);font-variant-numeric:tabular-nums}
+.seg{display:flex;flex-wrap:wrap;gap:4px;background:var(--surface-2);padding:3px;border-radius:8px}
+.seg label{flex:1 1 auto;position:relative;cursor:pointer}
+.seg input{position:absolute;opacity:0;inset:0;width:100%;height:100%;margin:0;cursor:pointer}
+.seg span{display:block;text-align:center;font-size:13px;padding:6px 10px;border-radius:6px;color:var(--ink-2);white-space:nowrap}
+.seg input:checked + span{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.seg input:focus-visible + span{outline:2px solid var(--accent);outline-offset:1px}
+.seg.off{opacity:.45}
+.seg.off label,.seg.off input{cursor:not-allowed}
+.hint{font-size:12px;color:var(--ink-3)}
+input[type=range]{width:100%;accent-color:var(--accent);margin:4px 0}
+.money{display:flex;align-items:center;gap:8px}
+.money input[type=number]{font-family:var(--mono);font-size:14px;width:120px;max-width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink)}
+.money input:disabled{color:var(--ink-3);background:var(--surface-2)}
+.check{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-2)}
+.check input{accent-color:var(--accent)}
+
+.readout{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px);background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:22px;display:flex;flex-direction:column;gap:20px;min-width:0}
+.gauge{display:flex;flex-direction:column;align-items:center;gap:6px}
+.gauge svg{width:100%;max-width:300px;height:auto;display:block}
+.gauge .track{stroke:var(--surface-2)}
+.gauge .val{transition:stroke-dashoffset .35s ease,stroke .2s}
+.gauge .big{font-family:var(--display);font-weight:700;font-size:44px;fill:var(--ink)}
+.gauge .cap{font-family:var(--mono);font-size:10px;fill:var(--ink-3)}
+.gauge .avgtick{stroke:var(--ink);stroke-width:2}
+.band{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:15px;padding:5px 12px;border-radius:999px;border:1px solid var(--line);background:var(--bg)}
+.band i{width:10px;height:10px;border-radius:50%;background:var(--bc)}
+.vsavg{font-size:13px;color:var(--ink-2);text-align:center}
+.sub{display:flex;flex-direction:column;gap:10px;padding-top:18px;border-top:1px solid var(--line)}
+.sub h3{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.keys{display:flex;gap:12px;font-size:12px;font-weight:400;color:var(--ink-3)}
+.keys b{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
+.drivers{display:flex;flex-direction:column;gap:7px}
+.drv{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:center;font-size:13px}
+.drv .name{min-width:0;overflow-wrap:anywhere;line-height:1.3}
+.drv .name small{display:block;color:var(--ink-3);font-size:12px}
+.drv .track{position:relative;height:16px}
+.drv .track::before{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--line)}
+.drv .bar{position:absolute;top:2px;height:12px;transition:width .3s ease,left .3s ease}
+.drv .bar.up{left:50%;background:var(--up);border-radius:0 4px 4px 0}
+.drv .bar.down{right:50%;background:var(--down);border-radius:4px 0 0 4px}
+.levers{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.levers li{display:flex;justify-content:space-between;gap:12px;align-items:baseline;font-size:14px}
+.levers .delta{font-family:var(--mono);font-size:13px;white-space:nowrap;color:var(--ink-2)}
+.levers .delta b{color:var(--ink);font-weight:500}
+.fine{font-size:12px;color:var(--ink-3)}
+
+/* model */
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:20px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.panel > p{color:var(--ink-2);font-size:14px}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:right;padding:8px 7px;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{font-size:12px;font-weight:500;color:var(--ink-3)}
+td{font-family:var(--mono);font-variant-numeric:tabular-nums}
+td:first-child{font-family:var(--body);font-weight:500}
+td.win{font-weight:500;color:var(--ink);background:var(--accent-soft)}
+tr.chosen td:first-child::after{content:"deployed";display:block;width:max-content;font-family:var(--mono);font-size:11px;margin-top:3px;padding:2px 6px;border-radius:4px;background:var(--accent);color:var(--on-accent)}
+.thr{display:flex;flex-direction:column;gap:6px}
+.thr .flabel output{font-size:18px}
+.cm{display:grid;grid-template-columns:auto 1fr 1fr;gap:6px;font-size:12px;color:var(--ink-3);align-items:stretch}
+.cm .h{display:flex;align-items:center;justify-content:center;text-align:center;padding:2px 4px}
+.cm .rowh{justify-content:flex-end;text-align:right}
+.cell{border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:2px;border:1px solid var(--line);background:color-mix(in srgb,var(--s1) calc(var(--w)*38%),var(--surface))}
+.cell b{font-family:var(--mono);font-size:22px;font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums}
+.cell span{color:var(--ink-2)}
+.mrow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.mrow div{display:flex;flex-direction:column;gap:2px}
+.mrow dt{font-size:12px;color:var(--ink-3)}
+.mrow dd{margin:0;font-family:var(--mono);font-size:18px;font-variant-numeric:tabular-nums}
+dl{margin:0}
+.legend{display:flex;gap:16px;font-size:12px;color:var(--ink-2);flex-wrap:wrap}
+.legend i{display:inline-block;width:14px;height:2px;vertical-align:middle;margin-right:6px}
+.chart{width:100%;position:relative}
+.chart svg{display:block;width:100%;height:auto;touch-action:none}
+.chart text{font-family:var(--mono);font-size:11px;fill:var(--ink-3)}
+.chart .gl{stroke:var(--line);stroke-width:1}
+.chart .ax{stroke:var(--ink-3);stroke-width:1}
+
+/* insights */
+.ins{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
+.bars{display:flex;flex-direction:column;gap:8px}
+.brow{display:grid;grid-template-columns:minmax(0,150px) minmax(0,1fr) 52px;gap:10px;align-items:center;font-size:13px;border-radius:4px}
+.brow .k{overflow-wrap:anywhere;line-height:1.25}
+.brow .t{height:14px;background:var(--surface-2);border-radius:0 4px 4px 0}
+.brow .f{height:100%;background:var(--s1);border-radius:0 4px 4px 0;min-width:2px}
+.brow:hover .f{filter:brightness(1.12)}
+.brow .v{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pair div{display:flex;flex-direction:column;gap:2px}
+.pair dt{font-size:12px;color:var(--ink-3)}
+.pair dd{margin:0;font-family:var(--mono);font-size:20px}
+.pair small{font-size:12px;color:var(--ink-3);font-family:var(--body)}
+
+/* how */
+.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;list-style:none;margin:0;padding:0;counter-reset:s}
+.steps li{counter-increment:s;display:flex;flex-direction:column;gap:6px;padding-top:12px;border-top:2px solid var(--ink);font-size:14px;color:var(--ink-2)}
+.steps li::before{content:counter(s,decimal-leading-zero);font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+.steps b{color:var(--ink);font-size:15px}
+.stack{display:flex;flex-wrap:wrap;gap:6px;margin-top:18px}
+.stack span{font-family:var(--mono);font-size:12px;padding:4px 8px;border:1px solid var(--line);border-radius:4px;color:var(--ink-2)}
+footer{border-top:1px solid var(--line);padding-top:18px;font-size:13px;color:var(--ink-3);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+
+#tip{position:fixed;z-index:10;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.4;padding:6px 9px;border-radius:6px;max-width:240px;font-family:var(--mono)}
+
+@media (max-width:900px){
+  .desk,.grid2,.ins{grid-template-columns:minmax(0,1fr)}
+  .readout{position:static;order:-1}
+  .steps{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:480px){
+  .wrap{padding-inline:16px;gap:44px}
+  .steps{grid-template-columns:minmax(0,1fr)}
+  .mrow{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .brow{grid-template-columns:minmax(0,104px) minmax(0,1fr) 48px}
+  .readout{padding:18px}
+}
+@media (prefers-reduced-motion:reduce){ *{transition:none!important} }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="topbar">
+      <span class="eyebrow">Machine learning project · Karan</span>
+      <nav class="nav" aria-label="Sections">
+        <a href="#predict">Predict</a><a href="#model">Model</a><a href="#insights">Insights</a><a href="#how">How it works</a>
+      </nav>
+    </div>
+    <h1>Customer Churn Predictor</h1>
+    <p class="lede">Describe a telecom customer and see how likely they are to leave, which factors are pushing that risk up or down, and what would lower it. The model runs live in your browser.</p>
+    <dl class="facts" id="facts"></dl>
+  </header>
+
+  <section id="predict">
+    <div class="sec-head">
+      <h2>Score a customer</h2>
+      <p>Change any field and the prediction updates instantly.</p>
+    </div>
+    <div class="desk">
+      <form class="record" id="form" autocomplete="off">
+        <div class="presets"><span>Try an example:</span>
+          <button type="button" class="btn" id="preset-risk" data-preset="risk">New fiber customer</button>
+          <button type="button" class="btn" id="preset-loyal" data-preset="loyal">Long-term family plan</button>
+          <button type="button" class="btn" id="preset-typical" data-preset="typical">Typical customer</button>
+        </div>
+        <div id="groups" class="record"></div>
+      </form>
+
+      <aside class="readout" aria-live="polite">
+        <div class="gauge">
+          <span class="eyebrow">Churn probability</span>
+          <svg viewBox="0 0 220 128" role="img" aria-labelledby="gauge-t">
+            <title id="gauge-t">Churn probability gauge</title>
+            <path class="track" d="M20 112 A90 90 0 0 1 200 112" fill="none" stroke-width="14" stroke-linecap="round"/>
+            <path class="val" id="g-val" d="M20 112 A90 90 0 0 1 200 112" fill="none" stroke-width="14" stroke-linecap="round" stroke="var(--crit)"/>
+            <line class="avgtick" id="g-avg" x1="0" y1="0" x2="0" y2="0"/>
+            <text class="big" id="g-num" x="110" y="104" text-anchor="middle">0%</text>
+            <text class="cap" x="20" y="127" text-anchor="middle">0</text>
+            <text class="cap" x="200" y="127" text-anchor="middle">100</text>
+          </svg>
+          <span class="band" id="band"><i></i><span id="band-t"></span></span>
+          <p class="vsavg" id="vsavg"></p>
+        </div>
+        <div class="sub">
+          <h3>What's driving it <span class="keys"><span><b style="background:var(--down)"></b>lowers risk</span><span><b style="background:var(--up)"></b>raises risk</span></span></h3>
+          <div class="drivers" id="drivers"></div>
+          <p class="fine">Each factor's push on the model's log-odds, compared with the average customer.</p>
+        </div>
+        <div class="sub">
+          <h3>What could lower it</h3>
+          <ul class="levers" id="levers"></ul>
+          <p class="fine">Re-scored with one change and everything else held fixed. These are model associations, not guaranteed outcomes.</p>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section id="model">
+    <div class="sec-head">
+      <h2>How good is the model?</h2>
+      <p>Evaluated on <span class="num" id="ntest"></span> customers the model never saw during training (a stratified 20% hold-out).</p>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <h3>Two models compared</h3>
+        <div class="tablewrap"><table id="cmp"></table></div>
+        <p>Logistic regression beat the random forest on every metric, and its coefficients are readable, so it is the model behind the predictor above.</p>
+        <h3>ROC curve</h3>
+        <div class="chart" id="roc"></div>
+      </div>
+      <div class="panel">
+        <h3>Decision threshold</h3>
+        <p>The cut-off decides who gets flagged. A lower threshold catches more churners but flags more loyal customers by mistake.</p>
+        <div class="thr">
+          <label class="flabel" for="thr">Flag a customer when probability is at least <output id="thr-o" for="thr">0.50</output></label>
+          <input type="range" id="thr" min="0.05" max="0.95" step="0.01" value="0.5">
+        </div>
+        <p id="thr-s" style="color:var(--ink)"></p>
+        <div class="cm" id="cm"></div>
+        <dl class="mrow" id="mrow"></dl>
+        <div class="legend"><span><i style="background:var(--s1)"></i>Precision</span><span><i style="background:var(--s2)"></i>Recall</span><span>by threshold · click the chart to set it</span></div>
+        <div class="chart" id="pr"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="insights">
+    <div class="sec-head">
+      <h2>What the data says</h2>
+      <p id="ins-lede"></p>
+    </div>
+    <div class="ins" id="ins"></div>
+  </section>
+
+  <section id="how">
+    <div class="sec-head"><h2>How it works</h2></div>
+    <ol class="steps">
+      <li><b>Data</b>IBM's Telco Customer Churn dataset: 7,043 customers, 19 features covering demographics, services, contract and billing.</li>
+      <li><b>Preprocess</b>Missing total charges filled with the median. Numeric features standardised, categorical features one-hot encoded.</li>
+      <li><b>Train</b>Logistic regression and a 200-tree random forest fitted on a stratified 80/20 split, then compared on held-out data.</li>
+      <li><b>Serve</b>The fitted scaler, encoder and coefficients are exported from scikit-learn and evaluated in JavaScript, so there is no server to wait on.</li>
+    </ol>
+    <div class="stack"><span>Python</span><span>pandas</span><span>scikit-learn</span><span>Logistic Regression</span><span>Random Forest</span><span>JavaScript</span><span>SVG</span></div>
+  </section>
+
+  <footer><span>Built by Karan</span><span>Data: IBM Telco Customer Churn sample dataset</span></footer>
+</div>
+<div id="tip" hidden></div>
+
+<script id="model-data" type="application/json">{"num":["Tenure Months","Monthly Charges","Total Charges"],"cat":["Gender","Senior Citizen","Partner","Dependents","Phone Service","Multiple Lines","Internet Service","Online Security","Online Backup","Device Protection","Tech Support","Streaming TV","Streaming Movies","Contract","Paperless Billing","Payment Method"],"cats":{"Gender":["Female","Male"],"Senior Citizen":["No","Yes"],"Partner":["No","Yes"],"Dependents":["No","Yes"],"Phone Service":["No","Yes"],"Multiple Lines":["No","No phone service","Yes"],"Internet Service":["DSL","Fiber optic","No"],"Online Security":["No","No internet service","Yes"],"Online Backup":["No","No internet service","Yes"],"Device Protection":["No","No internet service","Yes"],"Tech Support":["No","No internet service","Yes"],"Streaming TV":["No","No internet service","Yes"],"Streaming Movies":["No","No internet service","Yes"],"Contract":["Month-to-month","One year","Two year"],"Paperless Billing":["No","Yes"],"Payment Method":["Bank transfer (automatic)","Credit card (automatic)","Electronic check","Mailed check"]},"scalerMean":[32.48509052183174,64.92996095136671,2301.3190273340433],"scalerScale":[24.56656301538815,30.135430576006627,2277.6070530763936],"coef":[-1.2565738279825818,-0.49976401278854554,0.5066572123107914,-0.17878419198056253,-0.16545507596985312,-0.18268470353727392,-0.16155456441315166,-0.3172192944151455,-0.027019973535270015,0.6441584186464994,-0.9883976865969191,-0.1283904612420744,-0.21584880670836146,-0.29982214132300444,-0.1283904612420744,0.08397333461464941,-0.610619173223808,0.5528867790599469,-0.28650687378656214,0.1320510467212258,-0.28650687378656214,-0.18978344088509272,0.0070624295121244135,-0.28650687378656214,-0.06479482367597564,-0.039109243903824344,-0.28650687378656214,-0.018623150260048876,0.11460828457698076,-0.28650687378656214,-0.17234067874083978,-0.22777061703494514,-0.28650687378656214,0.170038222871083,-0.21577694752026141,-0.28650687378656214,0.15804455335640205,0.567191836786943,-0.1699254834458301,-0.7415056212915438,-0.35108757901612364,0.006848311065699525,-0.18778310824063307,-0.22794247703222523,0.1877166721102959,-0.11623035478786761],"intercept":-0.6465088821873081,"means":[-8.315834511746824e-17,-2.4108037776471716e-16,1.5370499808441997e-17,0.4971600993965211,0.5028399006034788,0.8367057152999645,0.16329428470003549,0.5156194533191338,0.48438054668086616,0.7690805821796237,0.23091941782037628,0.09921902733404331,0.9007809726659567,0.47657082002129925,0.09921902733404331,0.42421015264465745,0.3438054668086617,0.44071707490237844,0.2154774582889599,0.4964501242456514,0.2154774582889599,0.2880724174653887,0.4334398296059638,0.2154774582889599,0.3510827121050763,0.4387646432374867,0.2154774582889599,0.3457578984735534,0.49183528576499824,0.2154774582889599,0.2926872559460419,0.3951011714589989,0.2154774582889599,0.38942137025204115,0.3935037273695421,0.2154774582889599,0.39101881434149804,0.5505857294994675,0.20820021299254526,0.24121405750798722,0.40876819311324103,0.5912318068867589,0.2208022719204828,0.21529996450124245,0.33564075257365994,0.22825701100461485],"medians":{"Tenure Months":29.0,"Monthly Charges":70.35,"Total Charges":1397.475},"ranges":{"Tenure Months":[0.0,72.0],"Monthly Charges":[18.25,118.75],"Total Charges":[18.8,8684.8]},"metrics":{"lr":{"accuracy":0.8019872249822569,"precision":0.6435045317220544,"recall":0.56951871657754,"f1":0.6042553191489362,"auc":0.8487225193107547},"rf":{"accuracy":0.791,"precision":0.625,"recall":0.527,"f1":0.572,"auc":0.833}},"test":{"p":[758,6729,1012,4760,312,6217,4674,415,11,3873,1081,759,1401,6707,392,198,134,3203,2199,1181,7152,3577,248,138,2315,2627,5862,7542,58,7865,4200,1799,19,61,7897,878,3765,8,7737,1944,29,8376,3589,3331,448,5337,7252,4027,19,4321,55,8224,2063,904,722,6338,205,186,271,13,25,332,669,762,2880,4034,2353,3601,2268,7574,10,203,6047,761,92,567,229,6655,2789,47,546,184,3351,7996,274,4527,6798,5272,6293,1267,6028,4012,163,6163,1048,192,2067,45,6832,2529,7552,6505,2218,4580,4107,7,1450,648,159,178,234,6533,2419,5755,7396,395,5303,4998,111,72,487,6172,288,573,7128,239,5304,2210,6430,1459,2208,4518,1058,2154,425,1805,520,1052,92,3916,174,1201,5355,50,346,818,597,1113,4688,1876,226,6022,1800,3494,7606,1827,5924,4661,4636,5557,604,1817,7,36,1466,2121,443,1751,1398,162,5479,7640,482,2260,4804,5531,84,70,4399,1716,6694,135,7442,3345,7,2634,141,4103,1285,107,1611,4143,6423,346,1928,4877,2946,4918,4841,1887,605,68,238,217,2165,1495,650,2331,972,51,1436,3631,4670,460,144,4167,58,5369,6041,953,1084,1624,5989,814,7321,356,39,1984,7557,7684,256,7440,5722,282,8224,7536,3336,2098,1212,6480,6600,6234,1074,1336,1592,5699,7202,450,155,4219,720,1593,1218,108,902,340,1151,4095,2970,3370,4916,1000,54,451,5371,790,6854,218,4762,5084,6453,57,3369,3402,227,6214,6609,6024,8028,1345,5969,1451,4495,809,5192,7556,3141,999,6906,86,2222,459,149,275,299,1338,3953,1881,250,977,14,3825,5937,190,7306,2518,537,539,2024,2385,6483,6120,406,89,764,189,354,491,4210,5662,4830,6270,1292,1454,3102,851,839,3568,1077,103,2230,2724,467,837,46,48,5387,613,24,72,45,7190,1481,3440,7482,976,106,5746,1988,7361,663,1036,2880,3337,10,3180,1000,2350,177,7444,7695,160,370,3076,390,893,2576,1023,330,3457,6785,6961,3101,2338,4296,1339,836,4251,1055,740,309,693,90,6398,3791,1613,1284,7029,173,1613,424,728,4704,491,3386,1083,98,118,39,4651,529,2765,786,2711,41,2908,1502,5141,7116,469,2773,6281,6020,6594,1756,3295,2241,7561,1065,6423,1028,1710,5767,4409,19,2220,2520,6372,43,11,444,1763,1817,1687,984,6849,147,472,1060,2941,1667,2353,1117,2554,2723,2765,93,200,5888,6226,5312,319,1920,2619,7624,9,2620,130,167,4397,381,2415,1073,517,24,597,590,4998,1914,606,1978,262,1599,353,260,10,867,3940,6221,5948,2792,5994,10,1687,6943,236,96,562,7495,3292,5641,6709,487,2161,79,5907,933,4236,264,5591,113,3163,5550,10,676,431,2416,47,3798,107,7968,911,1162,573,4884,1130,430,2720,4641,1358,633,3197,556,5775,1344,4824,1231,925,1413,20,2872,1587,1265,6984,1114,1630,4063,58,6312,3088,2962,1191,7455,212,6398,840,302,111,5814,73,2248,153,4876,1328,88,7094,5522,5983,1354,5266,1436,1198,3397,552,311,6001,6719,6970,7732,4257,103,1357,6374,5030,54,2949,3424,844,110,362,22,6437,34,35,631,275,7566,1512,1217,5532,3892,3445,2687,6715,7120,225,52,27,4951,1066,1839,6629,113,7253,7097,444,208,3794,2336,286,9,2143,1145,3229,682,2645,47,247,7741,2250,572,7710,5478,14,177,2090,120,8293,6115,7179,8289,93,5170,101,6546,932,230,1001,487,2149,13,7308,811,1515,23,3749,2996,8250,6212,2295,4926,3287,1354,6675,7986,7,322,2694,5678,54,221,270,35,7290,7,1036,3886,559,879,1366,4191,2244,559,325,6607,270,162,2484,4402,1960,201,1250,400,2085,5621,6392,3585,162,4395,3480,113,312,323,8077,77,2272,313,2094,1462,3825,5685,691,758,49,1509,48,618,2067,52,201,7297,7627,5241,6637,4717,254,2925,2009,7323,1314,106,10,2409,6182,94,4993,2398,288,7582,3676,3037,4573,26,6851,6467,5331,243,943,33,525,7205,1930,2234,7672,965,2228,8011,132,320,7158,608,75,62,3177,42,184,3528,1309,5797,1020,5449,45,7517,4407,5900,1354,4248,1173,811,2043,5258,7512,1054,4765,7938,5603,1066,405,653,429,1020,337,423,5305,143,106,4808,1049,8002,1836,187,1318,100,36,7001,337,673,2922,4840,2120,86,6541,250,579,791,362,5119,2499,315,1031,2781,1762,285,6800,7929,537,6425,5570,2473,298,1437,2486,347,480,168,672,2155,190,7651,5224,6911,3796,98,6860,4541,124,365,40,225,2666,356,628,3122,40,4926,124,347,7399,206,1247,63,105,4851,179,5729,2250,5525,338,3141,183,2218,826,417,2325,4462,2028,5749,187,47,8,1164,1375,7029,1557,1793,2496,2745,2519,3616,232,5271,6589,7042,78,5489,272,890,5837,5116,8084,2680,1719,4517,2292,4720,56,4454,270,6989,311,3654,15,459,1821,4599,465,6249,6769,2338,2118,1267,7725,753,5083,7421,250,1436,4333,257,1072,6880,6665,742,1343,83,3745,142,3068,2244,3848,1414,266,1706,4117,67,3053,5042,219,5585,10,7462,244,249,7071,374,5954,1781,7814,7168,6768,5884,613,7289,22,6821,55,4028,6723,7291,1778,6843,206,5435,1677,18,312,5789,4835,52,123,18,3273,2696,7913,66,1712,5906,1810,4061,4482,5383,928,1719,370,84,1136,67,7438,3512,3376,584,34,2469,6034,3562,8208,2746,5539,75,1618,4309,5647,1630,835,1049,3354,130,6445,235,805,4991,100,2951,62,483,1144,881,485,3201,2248,70,76,5126,4341,2236,316,170,4592,1918,2079,159,645,1020,2130,8101,3045,801,518,2736,2263,6423,226,868,100,399,3840,1065,365,7915,894,163,161,86,5043,194,18,7860,52,6050,13,30,4769,472,2301,5382,2025,7398,2929,700,130,2350,995,2818,6589,2493,803,439,803,3595,325,470,191,5948,7696,4309,4948,171,748,7595,572,8796,2826,7837,6534,1870,665,121,2226,269,104,1190,4236,5999,131,4371,16,5362,5320,1150,8102,210,228,3791,2904,51,1373,7196,6926,7367,3859,4854,82,96,7222,69,1128,4151,3648,366,194,49,549,3298,7818,136,5712,62,3816,8467,5409,4305,1798,123,25,115,796,6184,2002,4989,3457,6365,5471,6035,23,101,6039,34,6098,6225,5229,5433,2106,622,6334,8485,43,625,239,284,2577,160,6706,7436,4798,823,8532,372,1332,7242,2326,736,2797,5242,1100,1098,319,4435,4868,7510,966,5242,5609,4244,2575,19,1283,276,7911,1049,119,4969,2740,330,974,15,2595,2442,1397,4595,2380,59,6874,1041,4653,150,7432,6484,5493,257,41,3967,8418,7684,5931,5830,5337,268,273,14,6080,136,3156,2708,3288,706,5022,6620,238,248,14,1283,441,983,4499,93,725,1854,940,586,4640,6337,1095,7179,588,3942,4050,60,5910,655,7660,186,208,178,1624,362,182,650,6448,191,6908,5770,3864,891,7,7098,1586,1854,4191,982,2330,3110,730,107,2019,2764,7595,6757,1072,3005,7204,14,3933,5985,1995,4111,1602,261,27,7334,4823,7486,75,108,79,853,1763,598,2012,303,3735,48,1707,2026,3842,5798,558,1254,365,2542,55,6265,37,5154,937,1339,1428,2730,6254,22,785,776,4047,1684,4622,7211,344,332,2566,6718,6729,22,152,26,805,34,157,6555,1125,116,2043,448,488,5277,243,2741,8444,172,2034,326,2765,2113,2623,1778,777,3610,3927,7140,19,1625,2913,128,901,1873,6948,6320,312,172,5501,5588,2859,334,713,4360,45,925,2733,2081,1203,4981,205,4934,4157,313,7760,103,3534,6352,2270,150,6889,658,232,36,115,133,72,1807,54,23],"y":[0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,1,1,0,1,0,0,0,0,1,0,1,0,1,1,0,0,0,0,0,1,0,0,0,1,0,1,0,0,0,1,0,0,0,0,0,1,0,0,1,1,1,1,1,1,0,0,1,0,0,0,0,1,0,0,0,0,1,1,0,0,0,1,1,0,1,0,0,1,1,0,0,0,1,0,1,1,0,1,1,0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,1,0,0,1,0,1,0,1,0,1,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,1,1,1,0,0,0,0,0,1,0,1,0,0,0,1,0,1,0,0,0,0,0,0,1,0,1,1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,1,0,0,1,0,0,1,1,1,0,0,0,1,1,0,0,1,1,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,1,1,0,1,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,1,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,1,1,1,0,1,0,1,0,1,0,0,0,0,0,0,0,1,1,0,0,0,0,1,0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,0,0,1,0,1,1,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,1,0,1,1,1,1,0,0,0,1,1,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0,1,1,0,0,1,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,1,1,0,0,0,1,1,1,0,1,0,1,0,0,0,0,0,1,0,0,0,0,0,1,1,0,0,0,1,1,0,0,0,1,1,1,1,0,0,1,1,0,1,0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,1,1,0,0,0,1,0,0,1,0,1,0,0,1,1,0,0,0,0,0,1,0,0,0,0,1,1,0,1,1,0,0,1,0,1,1,0,1,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,1,1,1,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,1,1,0,0,0,0,0,1,0,1,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,0,1,1,0,0,1,0,0,0,0,0,0,0,0,0,0,1,1,0,1,0,0,0,1,0,0,0,0,1,0,0,1,1,1,0,0,0,1,0,0,0,0,0,0,0,1,1,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1,0,1,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,1,0,1,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,1,0,0,0,0,0,0,0,1,0,1,1,1,0,0,1,0,0,0,0,0,0,0,1,0,0,1,0,0,1,0,1,0,0,0,0,1,0,1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,1,0,1,1,0,0,0,0,1,0,1,0,0,0,0,0,0,0,1,0,0,0,1,0,1,0,0,0,0,0,0,0,1,0,0,1,1,0,1,1,0,0,1,0,0,0,0,0,0,1,0,1,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1,1,1,1,1,0,0,1,0,0,0,1,0,1,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,1,1,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,1,0,1,0,0,1,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,1,0,0,1,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1,1,1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,1,0,1,0,1,1,1,0,1,0,0,0,1,1,0,1,0,1,1,0,0,0,1,0,1,1,1,1,0,0,1,1,0,0,0,0,0,0,0,0,1,0,1,0,0,1,0,0,1,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,1,1,0,0,0,1,0,1,1,0,0,0,0,1,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0,0,1,0,1,0,1,0,0,1,0,1,0,0,0,0,0,0,0,1,0,0,1,0,0,0,1,0,1,1,0,0,0,0,0,0,1,0,1,0,1,1,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,1,0,1,0,1,0,0,0,0,1,0,0,0,1,0,1,1,0,0,0,1,1,0,0,0,0,0,0,1,1,0,0,0,0,1,0,0,0,0,0,0,0,0,1,1,0,0,0,1,0,0,0,0,0,0,1,1,0,0,1,1,1,0,0,0,0,0,1,0,0,1,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0]},"roc":{"fpr":[0.0,0.001,0.0019,0.0039,0.0077,0.0087,0.0126,0.0135,0.0193,0.0213,0.0232,0.0242,0.028,0.03,0.0309,0.0329,0.0338,0.0357,0.0367,0.0396,0.0425,0.0464,0.0483,0.0493,0.0512,0.0522,0.0551,0.057,0.0589,0.0647,0.0676,0.0696,0.0734,0.0754,0.0792,0.0812,0.0889,0.0899,0.0928,0.0937,0.0995,0.1053,0.113,0.1198,0.1217,0.1295,0.1324,0.1382,0.1391,0.143,0.1478,0.1488,0.1507,0.1556,0.1614,0.1623,0.17,0.1787,0.1816,0.1874,0.1884,0.1903,0.1913,0.1952,0.2097,0.2135,0.2184,0.2203,0.2319,0.2367,0.2396,0.2473,0.2483,0.2531,0.256,0.2609,0.2667,0.2715,0.2763,0.2831,0.2899,0.2928,0.3005,0.3014,0.3034,0.3063,0.3111,0.3159,0.3198,0.3285,0.3324,0.3411,0.3469,0.3614,0.3671,0.3749,0.3884,0.3942,0.4174,0.4184,0.4271,0.4329,0.4386,0.4502,0.4512,0.4638,0.4657,0.4725,0.4908,0.4918,0.4986,0.4995,0.5246,0.5256,0.5643,0.5681,0.6657,0.7478,0.7874,1.0],"tpr":[0.0,0.0107,0.0267,0.0321,0.0508,0.0882,0.0989,0.1604,0.1765,0.1872,0.1898,0.2299,0.246,0.2487,0.2594,0.2674,0.2914,0.2941,0.3048,0.3369,0.3396,0.3503,0.3663,0.3743,0.393,0.4011,0.4064,0.4171,0.4385,0.4412,0.4492,0.4519,0.4599,0.4626,0.4813,0.4893,0.492,0.5,0.5107,0.5348,0.5401,0.5615,0.5695,0.5802,0.5882,0.5909,0.5989,0.6043,0.6123,0.6257,0.6283,0.639,0.6417,0.6471,0.6524,0.6604,0.6684,0.6738,0.6791,0.6818,0.6925,0.6952,0.7086,0.7112,0.7193,0.7299,0.7326,0.738,0.7406,0.746,0.7487,0.754,0.7594,0.762,0.7701,0.7727,0.7807,0.7861,0.7914,0.8021,0.8048,0.8128,0.8155,0.8209,0.8262,0.8342,0.8396,0.8422,0.8503,0.8529,0.8583,0.861,0.8717,0.8797,0.8824,0.8877,0.8904,0.8957,0.8984,0.9064,0.9118,0.9171,0.9225,0.9251,0.9332,0.9358,0.9412,0.9439,0.9492,0.9572,0.9599,0.9679,0.9706,0.9759,0.9786,0.984,0.9893,0.992,0.9973,1.0]},"kpi":{"n":7043,"churned":1869,"rate":0.2653698707936959,"tenureStay":37.56996521066873,"tenureChurn":17.979133226324237,"chargeStay":61.26512369540008,"chargeChurn":74.44133226324237,"nTrain":5634,"nTest":1409},"by":{"contract":[{"k":"Month-to-month","rate":0.4270967741935484,"n":3875},{"k":"One year","rate":0.11269517990495587,"n":1473},{"k":"Two year","rate":0.02831858407079646,"n":1695}],"internet":[{"k":"Fiber optic","rate":0.4189276485788114,"n":3096},{"k":"DSL","rate":0.1895910780669145,"n":2421},{"k":"No","rate":0.07404980340760157,"n":1526}],"payment":[{"k":"Bank transfer (automatic)","rate":0.16709844559585493,"n":1544},{"k":"Credit card (automatic)","rate":0.15243101182654403,"n":1522},{"k":"Electronic check","rate":0.4528541226215645,"n":2365},{"k":"Mailed check","rate":0.19106699751861042,"n":1612}],"senior":[{"k":"No","rate":0.23606168446026096,"n":5901},{"k":"Yes","rate":0.4168126094570928,"n":1142}],"tenure":[{"k":"0–6","rate":0.5293720459149224,"n":1481},{"k":"7–12","rate":0.3588652482269504,"n":705},{"k":"13–24","rate":0.287109375,"n":1024},{"k":"25–36","rate":0.21634615384615385,"n":832},{"k":"37–48","rate":0.19028871391076116,"n":762},{"k":"49–60","rate":0.14423076923076922,"n":832},{"k":"61–72","rate":0.06609808102345416,"n":1407}],"charges":[{"k":"$18–30","rate":0.09800362976406533,"n":1653},{"k":"$30–50","rate":0.3080495356037152,"n":646},{"k":"$50–70","rate":0.20757967269595176,"n":1161},{"k":"$70–90","rate":0.3779826464208243,"n":1844},{"k":"$90–119","rate":0.32777458309373203,"n":1739}]},"reasons":[{"k":"Attitude of support person","n":192},{"k":"Competitor offered higher download speeds","n":189},{"k":"Competitor offered more data","n":162},{"k":"Don't know","n":154},{"k":"Competitor made better offer","n":140},{"k":"Attitude of service provider","n":135},{"k":"Competitor had better devices","n":130},{"k":"Network reliability","n":103},{"k":"Product dissatisfaction","n":102},{"k":"Price too high","n":98},{"k":"Service dissatisfaction","n":89},{"k":"Lack of self-service on Website","n":88},{"k":"Extra data charges","n":57},{"k":"Moved","n":53},{"k":"Limited range of services","n":44},{"k":"Lack of affordable download/upload speed","n":44},{"k":"Long distance charges","n":44},{"k":"Poor expertise of phone support","n":20},{"k":"Poor expertise of online support","n":19},{"k":"Deceased","n":6}]}</script>
+<script>
+const M = JSON.parse(document.getElementById('model-data').textContent);
+/*PREDICT-START*/
+const IDX = (() => { const m = {}; let i = M.num.length; for (const c of M.cat) for (const v of M.cats[c]) m[c + '=' + v] = i++; return m; })();
+function vectorize(x){
+  const v = new Array(M.coef.length).fill(0);
+  M.num.forEach((c, i) => { v[i] = (x[c] - M.scalerMean[i]) / M.scalerScale[i]; });
+  for (const c of M.cat){ const j = IDX[c + '=' + x[c]]; if (j !== undefined) v[j] = 1; }
+  return v;
+}
+function predict(x){
+  const v = vectorize(x); let z = M.intercept;
+  for (let i = 0; i < v.length; i++) z += M.coef[i] * v[i];
+  return 1 / (1 + Math.exp(-z));
+}
+function contributions(x){
+  const v = vectorize(x), c = i => M.coef[i] * (v[i] - M.means[i]), out = [];
+  out.push({ name: 'Tenure', val: x['Tenure Months'] + ' months', c: c(0) });
+  out.push({ name: 'Charges', val: '$' + x['Monthly Charges'].toFixed(2) + '/mo, $' + Math.round(x['Total Charges']).toLocaleString() + ' total', c: c(1) + c(2) });
+  for (const f of M.cat){ let s = 0; for (const o of M.cats[f]) s += c(IDX[f + '=' + o]); out.push({ name: f, val: x[f], c: s }); }
+  return out.sort((a, b) => Math.abs(b.c) - Math.abs(a.c));
+}
+/*PREDICT-END*/
+
+const $ = id => document.getElementById(id);
+const pct = (p, d = 1) => (p * 100).toFixed(d) + '%';
+const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const ADDONS = ['Online Security', 'Online Backup', 'Device Protection', 'Tech Support', 'Streaming TV', 'Streaming Movies'];
+const YN = ['No', 'Yes'];
+const GROUPS = [
+  ['Customer', [['Gender', ['Female', 'Male']], ['Senior Citizen', YN], ['Partner', YN], ['Dependents', YN]]],
+  ['Account', [['Tenure Months'], ['Contract', M.cats['Contract']], ['Paperless Billing', YN], ['Payment Method', M.cats['Payment Method'], 'wide']]],
+  ['Services', [['Phone Service', YN], ['Multiple Lines', YN], ['Internet Service', ['No', 'DSL', 'Fiber optic'], 'wide'], ...ADDONS.map(a => [a, YN])]],
+  ['Charges', [['Monthly Charges'], ['Total Charges']]],
+];
+const PRESETS = {
+  typical: { 'Gender': 'Male', 'Senior Citizen': 'No', 'Partner': 'No', 'Dependents': 'No', 'Tenure Months': 29, 'Phone Service': 'Yes', 'Multiple Lines': 'No', 'Internet Service': 'Fiber optic', 'Online Security': 'No', 'Online Backup': 'No', 'Device Protection': 'No', 'Tech Support': 'No', 'Streaming TV': 'No', 'Streaming Movies': 'No', 'Contract': 'Month-to-month', 'Paperless Billing': 'Yes', 'Payment Method': 'Electronic check', 'Monthly Charges': 70.5 },
+  risk: { 'Gender': 'Female', 'Senior Citizen': 'Yes', 'Partner': 'No', 'Dependents': 'No', 'Tenure Months': 2, 'Phone Service': 'Yes', 'Multiple Lines': 'Yes', 'Internet Service': 'Fiber optic', 'Online Security': 'No', 'Online Backup': 'No', 'Device Protection': 'No', 'Tech Support': 'No', 'Streaming TV': 'Yes', 'Streaming Movies': 'Yes', 'Contract': 'Month-to-month', 'Paperless Billing': 'Yes', 'Payment Method': 'Electronic check', 'Monthly Charges': 95 },
+  loyal: { 'Gender': 'Male', 'Senior Citizen': 'No', 'Partner': 'Yes', 'Dependents': 'Yes', 'Tenure Months': 60, 'Phone Service': 'Yes', 'Multiple Lines': 'Yes', 'Internet Service': 'DSL', 'Online Security': 'Yes', 'Online Backup': 'Yes', 'Device Protection': 'Yes', 'Tech Support': 'Yes', 'Streaming TV': 'No', 'Streaming Movies': 'No', 'Contract': 'Two year', 'Paperless Billing': 'No', 'Payment Method': 'Credit card (automatic)', 'Monthly Charges': 68 },
+};
+let S = {}, autoTotal = true;
+
+/* ---------- form ---------- */
+function buildForm(){
+  $('groups').innerHTML = GROUPS.map(([g, fields]) => `<fieldset><legend>${g}</legend><div class="fields">${fields.map(([f, opts, cls]) => {
+    const id = slug(f);
+    if (f === 'Tenure Months') return `<div class="field wide"><label class="flabel" for="${id}">Tenure <output id="${id}-o" for="${id}"></output></label><input type="range" id="${id}" min="0" max="72" step="1"></div>`;
+    if (f === 'Monthly Charges') return `<div class="field wide"><label class="flabel" for="${id}">Monthly charges <output id="${id}-o" for="${id}"></output></label><input type="range" id="${id}" min="18" max="119" step="0.5"></div>`;
+    if (f === 'Total Charges') return `<div class="field wide"><label class="flabel" for="${id}">Total charges to date</label><div class="money"><span class="num">$</span><input type="number" id="${id}" min="0" max="9000" step="1" inputmode="decimal"><label class="check"><input type="checkbox" id="auto-total" checked> tenure × monthly</label></div></div>`;
+    return `<div class="field ${cls || ''}"><span class="flabel" id="${id}-l">${f}</span><div class="seg" id="${id}" role="radiogroup" aria-labelledby="${id}-l">${opts.map(o => `<label><input type="radio" name="${id}" id="${id}-${slug(o)}" value="${esc(o)}"><span>${esc(o)}</span></label>`).join('')}</div></div>`;
+  }).join('')}</div></fieldset>`).join('');
+}
+function effective(){
+  const x = { ...S };
+  if (x['Phone Service'] === 'No') x['Multiple Lines'] = 'No phone service';
+  if (x['Internet Service'] === 'No') ADDONS.forEach(a => x[a] = 'No internet service');
+  return x;
+}
+function syncForm(){
+  for (const [, fields] of GROUPS) for (const [f] of fields){
+    const id = slug(f), el = $(id);
+    if (el.type === 'range'){ el.value = S[f]; continue; }
+    if (el.type === 'number'){ if (document.activeElement !== el) el.value = Math.round(S[f]); el.disabled = autoTotal; continue; }
+    const off = (f === 'Multiple Lines' && S['Phone Service'] === 'No') || (ADDONS.includes(f) && S['Internet Service'] === 'No');
+    el.classList.toggle('off', off);
+    el.querySelectorAll('input').forEach(r => { r.checked = !off && r.value === S[f]; r.disabled = off; });
+  }
+  $('auto-total').checked = autoTotal;
+  $('tenure-months-o').textContent = S['Tenure Months'] + (S['Tenure Months'] === 1 ? ' month' : ' months');
+  $('monthly-charges-o').textContent = '$' + S['Monthly Charges'].toFixed(2);
+}
+function setState(p){ S = { ...p }; autoTotal = true; update(); }
+function update(){
+  if (autoTotal) S['Total Charges'] = Math.round(S['Tenure Months'] * S['Monthly Charges'] * 100) / 100;
+  syncForm(); renderResult();
+}
+$('form').addEventListener('input', e => {
+  const t = e.target;
+  if (t.id === 'auto-total') autoTotal = t.checked;
+  else if (t.id === 'tenure-months') S['Tenure Months'] = +t.value;
+  else if (t.id === 'monthly-charges') S['Monthly Charges'] = +t.value;
+  else if (t.id === 'total-charges') S['Total Charges'] = Math.max(0, +t.value || 0);
+  else if (t.type === 'radio'){ const f = GROUPS.flatMap(g => g[1]).find(([f]) => slug(f) === t.name)[0]; S[f] = t.value; }
+  update();
+});
+$('form').addEventListener('click', e => { const b = e.target.closest('[data-preset]'); if (b) setState(PRESETS[b.dataset.preset]); });
+$('form').addEventListener('submit', e => e.preventDefault());
+
+/* ---------- result ---------- */
+const ARC = Math.PI * 90;
+const LEVERS = [
+  ['Contract', 'One year', 'Move to a one-year contract'], ['Contract', 'Two year', 'Move to a two-year contract'],
+  ['Payment Method', 'Credit card (automatic)', 'Switch to automatic card payment'], ['Payment Method', 'Bank transfer (automatic)', 'Switch to automatic bank transfer'],
+  ['Tech Support', 'Yes', 'Add tech support'], ['Online Security', 'Yes', 'Add online security'], ['Online Backup', 'Yes', 'Add online backup'], ['Device Protection', 'Yes', 'Add device protection'],
+];
+function renderResult(){
+  const x = effective(), p = predict(x), avg = M.kpi.rate;
+  const band = p >= 0.6 ? ['High risk', 'var(--crit)', 'likely to churn'] : p >= 0.3 ? ['Medium risk', 'var(--warn)', 'worth watching'] : ['Low risk', 'var(--good)', 'likely to stay'];
+  const v = $('g-val'); v.style.strokeDasharray = ARC; v.style.strokeDashoffset = ARC * (1 - p); v.style.stroke = band[1];
+  $('g-num').textContent = pct(p, p < 0.1 ? 1 : 0);
+  const a = Math.PI * (1 - avg), cx = 110, cy = 112, t = $('g-avg');
+  t.setAttribute('x1', cx + 80 * Math.cos(a)); t.setAttribute('y1', cy - 80 * Math.sin(a)); t.setAttribute('x2', cx + 100 * Math.cos(a)); t.setAttribute('y2', cy - 100 * Math.sin(a));
+  $('band').style.setProperty('--bc', band[1]); $('band-t').textContent = band[0] + ' · ' + band[2];
+  const r = p / avg;
+  $('vsavg').textContent = (r >= 1.15 ? r.toFixed(1) + '× the' : r <= 0.87 ? (avg / p).toFixed(1) + '× lower than the' : 'About the same as the') + ' average customer (' + pct(avg) + ', marked on the gauge)';
+
+  const cs = contributions(x).filter(d => !d.val.startsWith('No internet') && !d.val.startsWith('No phone')).slice(0, 7), mx = Math.max(...cs.map(d => Math.abs(d.c)), 0.5);
+  $('drivers').innerHTML = cs.map(d => `<div class="drv" data-tip="${esc(d.name)}: ${d.c >= 0 ? '+' : '−'}${Math.abs(d.c).toFixed(2)} log-odds"><div class="name">${esc(d.name)}<small>${esc(d.val)}</small></div><div class="track"><div class="bar ${d.c >= 0 ? 'up' : 'down'}" style="width:${Math.abs(d.c) / mx * 50}%"></div></div></div>`).join('');
+
+  const best = {};
+  for (const [f, val, label] of LEVERS){
+    if (x[f] === val || x[f] === 'No internet service') continue;
+    if (f === 'Contract' && M.cats.Contract.indexOf(val) < M.cats.Contract.indexOf(x[f])) continue;
+    const q = predict({ ...x, [f]: val });
+    if (p - q >= 0.01 && (!best[f] || q < best[f].q)) best[f] = { q, label };
+  }
+  const top = Object.values(best).sort((a, b) => a.q - b.q).slice(0, 3);
+  $('levers').innerHTML = top.length ? top.map(l => `<li><span>${l.label}</span><span class="delta">${pct(p, 0)} → <b>${pct(l.q, 0)}</b></span></li>`).join('')
+    : '<li><span class="muted">This customer is already on the lowest-risk options the model can suggest.</span></li>';
+}
+
+/* ---------- tooltip ---------- */
+const tip = $('tip');
+function showTip(html, e){ tip.innerHTML = html; tip.hidden = false; const w = tip.offsetWidth, h = tip.offsetHeight; tip.style.left = Math.max(8, Math.min(e.clientX + 12, innerWidth - w - 8)) + 'px'; tip.style.top = Math.max(8, e.clientY - h - 10) + 'px'; }
+document.addEventListener('pointermove', e => { const el = e.target.closest && e.target.closest('[data-tip]'); if (el) showTip(esc(el.dataset.tip), e); else if (!e.target.closest || !e.target.closest('.chart')) tip.hidden = true; });
+document.addEventListener('pointerleave', () => tip.hidden = true);
+
+/* ---------- model section ---------- */
+const TP = M.test.p.map(v => v / 10000), TY = M.test.y, POS = TY.reduce((a, b) => a + b, 0);
+function at(t){
+  let tp = 0, fp = 0, fn = 0, tn = 0;
+  for (let i = 0; i < TP.length; i++){ const f = TP[i] >= t; if (TY[i]) f ? tp++ : fn++; else f ? fp++ : tn++; }
+  const precision = tp + fp ? tp / (tp + fp) : null, recall = tp / (tp + fn);
+  return { tp, fp, fn, tn, precision, recall, f1: precision ? 2 * precision * recall / (precision + recall) : 0, accuracy: (tp + tn) / TP.length, fpr: fp / (fp + tn) };
+}
+const SWEEP = []; for (let i = 5; i <= 95; i++) SWEEP.push({ t: i / 100, ...at(i / 100) });
+let THR = 0.5;
+
+function svg(el, h, draw){
+  const w = Math.max(260, el.clientWidth), parts = [];
+  draw(w, h, parts);
+  el.innerHTML = `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img">${parts.join('')}</svg>`;
+  return w;
+}
+function axes(p, w, h, m, xl, yl){
+  const X = v => m.l + v * (w - m.l - m.r), Y = v => h - m.b - v * (h - m.t - m.b);
+  for (const v of [0, .25, .5, .75, 1]){
+    p.push(`<line class="gl" x1="${X(0)}" x2="${X(1)}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${X(0) - 6}" y="${Y(v) + 4}" text-anchor="end">${v === 0 ? '0' : v === 1 ? '1' : v}</text>`);
+    p.push(`<text x="${X(v)}" y="${h - m.b + 16}" text-anchor="${v === 0 ? 'start' : v === 1 ? 'end' : 'middle'}">${v === 0 ? '0' : v === 1 ? '1' : v}</text>`);
+  }
+  p.push(`<text x="${X(.5)}" y="${h - 4}" text-anchor="middle">${xl}</text>`);
+  if (yl) p.push(`<text x="${X(0) + 6}" y="${Y(1) + 12}">${yl}</text>`);
+  return [X, Y];
+}
+const MG = { l: 34, r: 10, t: 10, b: 36 };
+function drawPR(){
+  const el = $('pr'), h = 230;
+  svg(el, h, (w, h, p) => {
+    const [X, Y] = axes(p, w, h, MG, 'threshold');
+    const line = (k, c) => p.push(`<path d="${SWEEP.filter(d => d[k] !== null).map((d, i) => (i ? 'L' : 'M') + X(d.t).toFixed(1) + ' ' + Y(d[k]).toFixed(1)).join('')}" fill="none" stroke="var(${c})" stroke-width="2" stroke-linejoin="round"/>`);
+    line('precision', '--s1'); line('recall', '--s2');
+    const d = at(THR);
+    p.push(`<line class="ax" x1="${X(THR)}" x2="${X(THR)}" y1="${Y(0)}" y2="${Y(1)}" stroke-dasharray="3 3"/>`);
+    if (d.precision !== null) p.push(`<circle cx="${X(THR)}" cy="${Y(d.precision)}" r="5" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/>`);
+    p.push(`<circle cx="${X(THR)}" cy="${Y(d.recall)}" r="5" fill="var(--s2)" stroke="var(--surface)" stroke-width="2"/>`);
+  });
+}
+function drawROC(){
+  const el = $('roc'), h = 250;
+  svg(el, h, (w, h, p) => {
+    const [X, Y] = axes(p, w, h, MG, 'false positive rate', 'true positive rate');
+    const pts = M.roc.fpr.map((f, i) => X(f).toFixed(1) + ' ' + Y(M.roc.tpr[i]).toFixed(1));
+    p.push(`<path d="M${pts.join('L')}L${X(1)} ${Y(0)}Z" fill="var(--s1)" fill-opacity=".12"/>`);
+    p.push(`<line class="ax" x1="${X(0)}" y1="${Y(0)}" x2="${X(1)}" y2="${Y(1)}" stroke-dasharray="3 3"/>`);
+    p.push(`<path d="M${pts.join('L')}" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/>`);
+    const d = at(THR), cx = X(d.fpr), cy = Y(d.recall);
+    p.push(`<circle cx="${cx}" cy="${cy}" r="5" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/>`);
+    p.push(`<text x="${cx + 10}" y="${cy + 14}" style="fill:var(--ink-2)">threshold ${THR.toFixed(2)}</text>`);
+    p.push(`<text x="${X(.62)}" y="${Y(.3)}" text-anchor="middle" style="fill:var(--ink);font-size:13px">AUC ${M.metrics.lr.auc.toFixed(3)}</text>`);
+    p.push(`<text x="${X(.62)}" y="${Y(.3) + 15}" text-anchor="middle">dashed line = random guess</text>`);
+  });
+}
+function chartHover(el, fn){
+  el.addEventListener('pointermove', e => { const r = el.getBoundingClientRect(), w = r.width, v = (e.clientX - r.left - MG.l) / (w - MG.l - MG.r); if (v < 0 || v > 1){ tip.hidden = true; return; } showTip(fn(v), e); });
+  el.addEventListener('pointerleave', () => tip.hidden = true);
+}
+function renderThreshold(){
+  const d = at(THR), n = TP.length;
+  $('thr-o').textContent = THR.toFixed(2);
+  $('thr-s').innerHTML = `Flags <b class="num">${d.tp + d.fp}</b> of ${n.toLocaleString()} customers and catches <b class="num">${d.tp}</b> of the ${POS} who actually churned (${pct(d.recall, 0)}).`;
+  const cell = (v, l, s) => `<div class="cell" style="--w:${(v / n).toFixed(3)}" data-tip="${l}: ${v} customers"><b>${v}</b><span>${s}</span></div>`;
+  $('cm').innerHTML = `<div></div><div class="h">Predicted stay</div><div class="h">Predicted churn</div>
+    <div class="h rowh">Actually<br>stayed</div>${cell(d.tn, 'True negatives', 'correctly left alone')}${cell(d.fp, 'False positives', 'flagged by mistake')}
+    <div class="h rowh">Actually<br>churned</div>${cell(d.fn, 'False negatives', 'churners missed')}${cell(d.tp, 'True positives', 'churners caught')}`;
+  $('mrow').innerHTML = [['Precision', d.precision], ['Recall', d.recall], ['F1', d.f1], ['Accuracy', d.accuracy]].map(([k, v]) => `<div><dt>${k}</dt><dd>${v === null ? '–' : v.toFixed(3)}</dd></div>`).join('');
+  drawPR(); drawROC();
+}
+$('thr').addEventListener('input', e => { THR = +e.target.value; renderThreshold(); });
+$('pr').addEventListener('click', e => { const r = $('pr').getBoundingClientRect(), v = (e.clientX - r.left - MG.l) / (r.width - MG.l - MG.r); if (v >= 0 && v <= 1){ THR = Math.min(.95, Math.max(.05, Math.round(v * 100) / 100)); $('thr').value = THR; renderThreshold(); } });
+chartHover($('pr'), v => { const t = Math.min(.95, Math.max(.05, Math.round(v * 100) / 100)), d = at(t); return `threshold ${t.toFixed(2)}<br>precision ${d.precision === null ? '–' : d.precision.toFixed(3)}<br>recall ${d.recall.toFixed(3)}`; });
+chartHover($('roc'), v => { let b = 0; M.roc.fpr.forEach((f, i) => { if (Math.abs(f - v) < Math.abs(M.roc.fpr[b] - v)) b = i; }); return `FPR ${M.roc.fpr[b].toFixed(3)}<br>TPR ${M.roc.tpr[b].toFixed(3)}`; });
+
+function renderStatic(){
+  const k = M.kpi, lr = M.metrics.lr, rf = M.metrics.rf;
+  $('facts').innerHTML = [['Customers', k.n.toLocaleString()], ['Churn rate', pct(k.rate)], ['ROC-AUC', lr.auc.toFixed(3)], ['Accuracy', pct(lr.accuracy)], ['Features', M.num.length + M.cat.length]].map(([a, b]) => `<div><dt>${a}</dt><dd>${b}</dd></div>`).join('');
+  $('ntest').textContent = k.nTest.toLocaleString();
+  const cols = [['Accuracy', 'accuracy'], ['Precision', 'precision'], ['Recall', 'recall'], ['F1', 'f1'], ['ROC-AUC', 'auc']];
+  const row = (n, a, b, cls) => `<tr class="${cls}"><td>${n}</td>${cols.map(([, c]) => `<td class="${a[c] > b[c] ? 'win' : ''}">${a[c].toFixed(3)}</td>`).join('')}</tr>`;
+  $('cmp').innerHTML = `<thead><tr><th>Model</th>${cols.map(c => `<th>${c[0]}</th>`).join('')}</tr></thead><tbody>${row('Logistic regression', lr, rf, 'chosen')}${row('Random forest', rf, lr, '')}</tbody>`;
+
+  const mo = M.by.contract[0], two = M.by.contract[2];
+  $('ins-lede').textContent = `${k.churned.toLocaleString()} of ${k.n.toLocaleString()} customers left (${pct(k.rate)}). Month-to-month customers churn about ${Math.round(mo.rate / two.rate)} times as often as those on two-year contracts, and most churn happens in the first six months.`;
+  const bars = (title, note, rows, fmt, max) => `<div class="panel"><h3>${title}</h3><div class="bars">${rows.map(r => `<div class="brow" data-tip="${esc(r.k)}: ${r.tip}"><span class="k">${esc(r.k)}</span><div class="t"><div class="f" style="width:${r.v / max * 100}%"></div></div><span class="v">${fmt(r.v)}</span></div>`).join('')}</div>${note ? `<p>${note}</p>` : ''}</div>`;
+  const rate = (title, note, key) => bars(title, note, M.by[key].map(r => ({ k: r.k, v: r.rate, tip: `${pct(r.rate)} churned, ${r.n.toLocaleString()} customers` })), v => pct(v, 0), 0.6);
+  const rs = M.reasons.slice(0, 8), rmax = rs[0].n;
+  $('ins').innerHTML =
+    rate('Churn rate by contract', 'Commitment length is the clearest dividing line in the data.', 'contract') +
+    rate('Churn rate by internet service', 'Fiber customers pay more and leave more than twice as often as DSL customers.', 'internet') +
+    rate('Churn rate by tenure (months)', 'Risk falls steadily the longer a customer stays.', 'tenure') +
+    bars('Top reasons customers gave for leaving', `Stated by the ${k.churned.toLocaleString()} customers who churned. Competitor offers and support experience lead.`, rs.map(r => ({ k: r.k, v: r.n, tip: `${r.n} customers (${pct(r.n / k.churned)} of churners)` })), v => v, rmax) +
+    rate('Churn rate by payment method', 'Electronic check stands out. Automatic payments go with the lowest churn.', 'payment') +
+    `<div class="panel"><h3>Churned vs stayed</h3><dl class="pair">
+      <div><dt>Average tenure, stayed</dt><dd>${k.tenureStay.toFixed(1)} <small>months</small></dd></div>
+      <div><dt>Average tenure, churned</dt><dd>${k.tenureChurn.toFixed(1)} <small>months</small></dd></div>
+      <div><dt>Monthly charges, stayed</dt><dd>$${k.chargeStay.toFixed(2)}</dd></div>
+      <div><dt>Monthly charges, churned</dt><dd>$${k.chargeChurn.toFixed(2)}</dd></div>
+      <div><dt>Senior citizens</dt><dd>${pct(M.by.senior[1].rate)} <small>churn</small></dd></div>
+      <div><dt>Everyone else</dt><dd>${pct(M.by.senior[0].rate)} <small>churn</small></dd></div>
+    </dl><p>Customers who leave are newer and pay about $${(k.chargeChurn - k.chargeStay).toFixed(0)} more per month.</p></div>`;
+}
+
+buildForm(); renderStatic(); setState(PRESETS.risk); renderThreshold();
+let rz; new ResizeObserver(() => { clearTimeout(rz); rz = setTimeout(() => { drawPR(); drawROC(); }, 80); }).observe($('pr'));
+</script>
+</body>
+</html>
